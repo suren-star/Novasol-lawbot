@@ -36,7 +36,7 @@ def main():
         for href, title in page.links:
             full = urljoin(url, href)
             parsed = urlsplit(full)
-            if parsed.hostname in ('arlis.am','www.arlis.am') and re.fullmatch(r'/hy/acts/\\d+/?', parsed.path):
+            if parsed.hostname in ('arlis.am','www.arlis.am') and re.fullmatch(r'/hy/acts/\d+/?', parsed.path):
                 links.add(full)
         print('ARLIS homepage fetch: OK')
         print('ARLIS readable act links:', len(links))
