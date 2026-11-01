@@ -2,6 +2,10 @@
 
 Configured for @Novasol_lawbot. Not deployed or connected to Telegram.
 
+## name.am / cPanel
+
+See [CPANEL.md](CPANEL.md) for the Python 3.11 WSGI webhook adapter and minute cron setup. This is the selected hosting path. Source collection is disabled by default until full ARLIS coverage is validated. The always-on polling setup below is an alternative and must not run alongside webhook mode.
+
 ## Agreed behaviour
 
 - Anyone can subscribe in a private Telegram chat, choosing Armenian or Russian.
