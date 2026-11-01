@@ -54,3 +54,8 @@ Delivery uses conservative at-most-once attempts. Network failures and interrupt
 Validate full listing coverage, document extraction, model compatibility and translation quality. Run live smoke tests with only the owner's test subscription: source ingestion, bilingual drafts, approval, rejection, unauthorized approval, restart, unsubscribe and delivery failures. Add database backup, monitoring and a subscriber-facing privacy notice. Review hosting and API costs before provisioning.
 
 No real token, user identifier or API key is included. The exposed historical token has not been used.
+
+
+## ARLIS extraction update
+
+See [ARLIS.md](ARLIS.md) for the verified extraction stage and free hosting probe. The /latest URL issue is fixed; explicit linked revisions can be extracted and compared. Full daily coverage and PDF processing remain unfinished, so collection stays disabled. Twenty-one local tests pass; live source probe succeeded without AI or Telegram calls.
