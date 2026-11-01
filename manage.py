@@ -102,6 +102,17 @@ def main():
             print('Administrator configured:', bool(bot.admin))
             print('AI configured:', bool(bot.ai_key and bot.model))
             print('Collection enabled:', os.getenv('COLLECTION_ENABLED', '').lower() == 'true')
+        elif command == 'check-channel':
+            if not bot.channel:
+                raise ValueError('TELEGRAM_CHANNEL_ID missing')
+            me = bot.api('getMe')
+            chat = bot.api('getChat', chat_id=bot.channel)
+            member = bot.api('getChatMember', chat_id=bot.channel, user_id=me['id'])
+            print('Channel configured:', bot.channel)
+            print('Chat type:', chat.get('type'))
+            print('Bot status:', member.get('status'))
+            print('Can post:', member.get('status') == 'creator' or (member.get('status') == 'administrator' and member.get('can_post_messages') is True))
+            print('No messages published.')
         elif command == 'tick':
             with open(PRIVATE / 'tick.lock', 'a') as lock:
                 try:
