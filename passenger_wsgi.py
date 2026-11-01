@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hosting import database, configuration
@@ -17,8 +18,19 @@ def application(environ, start_response):
         return [body]
 
     path = environ.get('PATH_INFO', '')
+    try:
+        configuration()
+    except Exception:
+        return reply('503 Service Unavailable', 'Configuration incomplete')
+    # Passenger can pass either a mount-relative or full path for a sub-URI.
+    mount = urlsplit(os.getenv('PUBLIC_APP_URL', '')).path.rstrip('/')
+    if mount and (path == mount or path.startswith(mount + '/')):
+        path = path[len(mount):] or '/'
+    path = path.rstrip('/') or '/'
     if environ.get('REQUEST_METHOD') == 'GET' and path in ('', '/', '/health'):
         return reply('200 OK', 'Novasol webhook online. Deployment is not proof of source coverage.')
+    if path == '/telegram' and environ.get('REQUEST_METHOD') != 'POST':
+        return reply('405 Method Not Allowed', 'Telegram endpoint ready; POST required.')
     if path != '/telegram' or environ.get('REQUEST_METHOD') != 'POST':
         return reply('404 Not Found', 'Not found')
     try:
