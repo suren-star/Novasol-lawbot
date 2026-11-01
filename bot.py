@@ -80,9 +80,9 @@ class Bot:
     def __init__(self, db):
         self.db = db
         self.token = os.environ['TELEGRAM_BOT_TOKEN']
-        self.admin = int(os.environ['ADMIN_CHAT_ID'])
-        self.ai_key = os.environ['OPENAI_API_KEY']
-        self.model = os.environ['OPENAI_MODEL']
+        self.admin = int(os.getenv('ADMIN_CHAT_ID', '0'))
+        self.ai_key = os.getenv('OPENAI_API_KEY', '')
+        self.model = os.getenv('OPENAI_MODEL', '')
 
     def api(self, method, **payload):
         value = json.loads(request(f'https://api.telegram.org/bot{self.token}/{method}',
@@ -104,6 +104,8 @@ class Bot:
             self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (key, str(value)))
 
     def collect(self):
+        if not self.admin or not self.ai_key or not self.model:
+            raise APIError('Administrator and AI settings must be configured before collection')
         # Deliberately limited source adapter: configure complete listing pages
         # after validating pagination; the homepage alone is NOT complete coverage.
         sources = os.getenv('ARLIS_LISTING_URLS', 'https://www.arlis.am/hy/').split(',')
