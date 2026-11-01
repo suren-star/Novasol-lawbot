@@ -8,6 +8,22 @@ from passenger_wsgi import application
 
 
 class WebhookTests(unittest.TestCase):
+    @patch('passenger_wsgi.configuration')
+    def test_mounted_endpoint_reaches_authentication(self, config):
+        for path in ('/telegram', '/lawbot/telegram', '/lawbot/telegram/'):
+            status = []
+            with patch.dict(os.environ, {'PUBLIC_APP_URL':'https://novasol.am/lawbot', 'TELEGRAM_WEBHOOK_SECRET':'expected'}):
+                application({'PATH_INFO':path, 'REQUEST_METHOD':'POST'}, lambda s,h:status.append(s))
+            self.assertEqual(status, ['403 Forbidden'])
+
+    @patch('passenger_wsgi.configuration')
+    def test_get_endpoint_is_distinguishable_from_missing_route(self, config):
+        status = []
+        with patch.dict(os.environ, {'PUBLIC_APP_URL':'https://novasol.am/lawbot'}):
+            result = application({'PATH_INFO':'/lawbot/telegram', 'REQUEST_METHOD':'GET'}, lambda s,h:status.append(s))
+        self.assertEqual(status, ['405 Method Not Allowed'])
+        self.assertIn(b'POST required', b''.join(result))
+
     def invoke(self, secret='test', payload=None):
         data = json.dumps(payload or {'update_id': 1}).encode()
         status = []
