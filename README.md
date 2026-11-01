@@ -1,5 +1,11 @@
 # Novasol LawBot — pre-launch prototype
 
+## Current mode: private Armenian channel publisher
+
+The bot now ignores private commands from everyone except ADMIN_CHAT_ID. Armenian drafts go to the administrator; approval queues one Armenian post to TELEGRAM_CHANNEL_ID (@novasol_official). Legacy subscriber queues are not used. Existing data is retained. Configure the channel before approving. `python manage.py check-channel` checks posting rights without publishing. `/testdraft` creates an explicitly labelled Armenian test draft for approval; reject it if no public test is desired. Failed or ambiguous channel delivery stays in operator-review state.
+
+15 local tests pass. This change implements channel delivery, not complete ARLIS ingestion or old/new version comparison. Source monitoring remains unvalidated, AI funding previously unavailable, COLLECTION_ENABLED must remain false. The legacy setup descriptions below are historical; direct subscriber delivery and Russian selection no longer apply.
+
 Configured for @Novasol_lawbot. Not deployed or connected to Telegram.
 
 ## name.am / cPanel
