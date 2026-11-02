@@ -75,7 +75,7 @@ def summarize(bot,row):
       'Never list changes that the document does NOT contain, unrelated topics, missing data, '
       'or inability to compare previous editions. Do not add technical caveats to the public post. '
       'Absence of evidence must never become an invented fact or a claim that nothing changed. '
-      'Use concise Armenian sections where supported: Փոփոխությունը, Ո՞ւմ է վերաբերում, Ժամկետը, Անելիքը. '
+      'Start with a short factual Armenian headline. Then use only supported sections, in this order: Ի՞նչ է փոխվել, Ո՞ւմ է վերաբերում, Ե՞րբ և ի՞նչ անել. Explain the concrete rule instead of retelling the entire act. Aim for 600-1200 characters, allowing up to 1800 only for complex changes that need the detail. Do not pad short alerts to meet a minimum. The application appends the official source link. '
       'Avoid repetitive filler and generic claims about efficiency or modernization. '
       'Preserve monetary amounts with the exact source unit; do not convert thousands to millions '
       'or combine units such as million thousand. Omit amounts if table alignment is ambiguous. '
