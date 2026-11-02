@@ -13,12 +13,20 @@ from pdf_sources import pdf_url
 
 MAX_CHARACTERS = 60000
 DAILY_CALL_LIMIT = 3
+VALIDATION_CODES = {
+    'Invalid relevance':'RELEVANCE_FIELD_INVALID',
+    'Missing verifiable business-rule passage':'BUSINESS_QUOTE_NOT_VERIFIABLE',
+    'Invalid summary':'SUMMARY_EMPTY_TOO_LONG_OR_CONTAINS_LINK',
+    'Summary is not Armenian':'ARMENIAN_LANGUAGE_CHECK_FAILED',
+}
 
 
 def setup(db):
     db.execute('''CREATE TABLE IF NOT EXISTS pdf_generation(
       fingerprint TEXT PRIMARY KEY, url TEXT NOT NULL, source_hash TEXT NOT NULL,
       day TEXT NOT NULL, status TEXT NOT NULL, draft INTEGER, error_type TEXT)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS pdf_response_cache(
+      fingerprint TEXT PRIMARY KEY, response TEXT, reason TEXT)''')
     db.commit()
 
 
@@ -88,7 +96,9 @@ def summarize(bot,row):
         'messages':[{'role':'system','content':instruction},
                     {'role':'user','content':row[1]+'\n\n'+row[3]}],
     },{'Authorization':'Bearer '+bot.ai_key,'Content-Type':'application/json'}))
-    return json.loads(response['choices'][0]['message']['content'])
+    # Retain the actual message before parsing/validation; never discard a paid
+    # response solely because its JSON or summary failed local checks.
+    return response['choices'][0]['message']['content']
 
 
 def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_suffix=''):
@@ -122,6 +132,13 @@ def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_su
             raise
         try:
             result = builder(bot,row)
+            with bot.db:
+                bot.db.execute('INSERT OR REPLACE INTO pdf_response_cache VALUES(?,?,NULL)',
+                               (key,json.dumps(result,ensure_ascii=False)))
+            if isinstance(result,str):
+                result = json.loads(result)
+            if not isinstance(result,dict):
+                raise ValueError('Invalid relevance')
             if type(result.get('relevant')) is not bool:
                 raise ValueError('Invalid relevance')
             draft_id = None
@@ -150,9 +167,14 @@ def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_su
                                (status,draft_id,key))
             return 'One PDF processed: '+status+'. No channel publication performed.'
         except Exception as exc:
+            reason = ('RESPONSE_JSON_INVALID' if isinstance(exc,json.JSONDecodeError) else
+                      VALIDATION_CODES.get(str(exc),'API_REQUEST_FAILED' if isinstance(exc,APIError)
+                                           else 'UNCLASSIFIED_'+type(exc).__name__))
             with bot.db:
                 bot.db.execute("UPDATE pdf_generation SET status='review',error_type=? WHERE fingerprint=?",
                                (type(exc).__name__,key))
+                bot.db.execute('''INSERT INTO pdf_response_cache(fingerprint,reason) VALUES(?,?)
+                  ON CONFLICT(fingerprint) DO UPDATE SET reason=excluded.reason''',(key,reason))
             raise
     return 'No eligible '+('baseline sample' if preview else 'new PDF')+'. No AI request made.'
 
@@ -184,6 +206,20 @@ def notify_previews(bot):
         if claimed:
             bot.send(bot.admin,'ՓՈՐՁՆԱԿԱՆ ԱՄՓՈՓԱԳԻՐ — միայն ստուգման համար, չի հրապարակվում։\n\n'+text)
     return len(rows)
+
+
+def review_details(db):
+    setup(db)
+    rows=db.execute('''SELECT g.url,g.error_type,c.reason,c.response
+      FROM pdf_generation g LEFT JOIN pdf_response_cache c USING(fingerprint)
+      WHERE g.status='review' ORDER BY g.rowid''').fetchall()
+    print('Review attempts:',len(rows))
+    for url,error,reason,response in rows:
+        print('Source:',url)
+        print('Error type:',error)
+        print('Reason code:',reason or 'LEGACY_REASON_NOT_RECORDED')
+        print('Private response cached:',response is not None)
+    print('No AI calls or Telegram messages. No response text or credentials displayed.')
 
 
 def diagnose(sources,db):
@@ -252,8 +288,10 @@ def main():
             setup(db)
             print('PDF generation statuses:',db.execute('SELECT status,count(*) FROM pdf_generation GROUP BY status').fetchall())
             print('Saved failure types:',db.execute("SELECT error_type,count(*) FROM pdf_generation WHERE error_type IS NOT NULL GROUP BY error_type").fetchall())
+        elif command == 'review-details':
+            review_details(db)
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose | review-details')
     finally:
         sources.close()
         db.close()
