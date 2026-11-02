@@ -23,13 +23,13 @@ def setup(db):
     db.commit()
 
 
-def candidates(sources):
+def candidates(sources, baseline=False):
     # Baseline documents and manual-review sources never enter this queue.
     return sources.execute('''SELECT r.url,r.title,v.sha256,v.text,v.pages
       FROM source_records r JOIN source_versions v ON v.url=r.url
-      WHERE r.is_baseline=0 AND r.status='extracted' AND v.status='extracted'
+      WHERE r.is_baseline=? AND r.status='extracted' AND v.status='extracted'
         AND v.id=(SELECT max(v2.id) FROM source_versions v2 WHERE v2.url=r.url)
-      ORDER BY r.first_seen,r.url''').fetchall()
+      ORDER BY r.first_seen,r.url''',(int(baseline),)).fetchall()
 
 
 def fingerprint(row):
@@ -75,15 +75,19 @@ def summarize(bot,row):
     return json.loads(response['choices'][0]['message']['content'])
 
 
-def generate(sources,bot,builder=summarize,day=None):
+def generate(sources,bot,builder=summarize,day=None,preview=False):
     setup(bot.db)
     if not bot.admin or not bot.ai_key or not bot.model:
         raise APIError('Administrator and AI settings required')
     day = day or dt.datetime.now(ZoneInfo('Asia/Yerevan')).date().isoformat()
-    for row in candidates(sources):
+    rows = candidates(sources,baseline=preview)
+    # Stable, bounded sample; use one existing source without changing its baseline.
+    if preview:
+        rows = sorted(rows,key=lambda row:(len(row[3])>20000,-min(len(row[3]),20000),row[0]))
+    for row in rows:
         if not eligible(row):
             continue  # Never truncate a legal source to fit the model input.
-        key = fingerprint(row)
+        key = ('preview:' if preview else '') + fingerprint(row)
         # Reserve before the paid call. Failed or interrupted calls are never
         # retried automatically. All reservations count towards the daily cap.
         bot.db.execute('BEGIN IMMEDIATE')
@@ -115,11 +119,11 @@ def generate(sources,bot,builder=summarize,day=None):
                 if not letters or armenian/letters < .5:
                     raise ValueError('Summary is not Armenian')
                 post = hy.strip()+'\n\n'+DISCLAIMER+'\n\nԱղբյուր՝\n'+pdf_url(row[0])
-                status = 'drafted'
+                status = 'preview' if preview else 'drafted'
             with bot.db:
                 if result['relevant']:
                     cur = bot.db.execute('INSERT INTO drafts(fingerprint,hy,ru,status) VALUES(?,?,?,?)',
-                                         (key,post,'','pending'))
+                                         (key,post,'','preview' if preview else 'pending'))
                     draft_id = cur.lastrowid
                 bot.db.execute('UPDATE pdf_generation SET status=?,draft=? WHERE fingerprint=?',
                                (status,draft_id,key))
@@ -129,7 +133,20 @@ def generate(sources,bot,builder=summarize,day=None):
                 bot.db.execute("UPDATE pdf_generation SET status='review',error_type=? WHERE fingerprint=?",
                                (type(exc).__name__,key))
             raise
-    return 'No eligible new PDF. No AI request made.'
+    return 'No eligible '+('baseline sample' if preview else 'new PDF')+'. No AI request made.'
+
+
+def notify_previews(bot):
+    if not bot.admin:
+        raise APIError('Administrator required')
+    rows = bot.db.execute("SELECT id,hy FROM drafts WHERE status='preview' AND notified=0 ORDER BY id").fetchall()
+    for ident,text in rows:
+        # Claim before sending, to avoid repeat sends on ambiguous network failures.
+        with bot.db:
+            claimed = bot.db.execute("UPDATE drafts SET notified=1 WHERE id=? AND status='preview' AND notified=0",(ident,)).rowcount
+        if claimed:
+            bot.send(bot.admin,'ՓՈՐՁՆԱԿԱՆ ԱՄՓՈՓԱԳԻՐ — միայն ստուգման համար, չի հրապարակվում։\n\n'+text)
+    return len(rows)
 
 
 def main():
@@ -148,6 +165,12 @@ def main():
         elif command == 'generate':
             print(generate(sources,Bot(db)))
             print('At most one AI call; no Telegram messages. Request cap: 3/day for this PDF bridge.')
+        elif command == 'sample':
+            print(generate(sources,Bot(db),preview=True))
+            print('At most one paid AI call. Baseline unchanged. No Telegram messages; preview cannot be approved for publication.')
+        elif command == 'sample-notify':
+            print('Preview messages:',notify_previews(Bot(db)))
+            print('Administrator only; no approval buttons, AI calls or channel posts.')
         elif command == 'notify':
             Bot(db).notify()
             print('Pending drafts sent to configured administrator. No channel publication performed.')
@@ -156,7 +179,7 @@ def main():
             print('PDF generation statuses:',db.execute('SELECT status,count(*) FROM pdf_generation GROUP BY status').fetchall())
             print('Saved failure types:',db.execute("SELECT error_type,count(*) FROM pdf_generation WHERE error_type IS NOT NULL GROUP BY error_type").fetchall())
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | sample-notify')
     finally:
         sources.close()
         db.close()
@@ -167,4 +190,6 @@ if __name__ == '__main__':
         main()
     except Exception as exc:
         print('PDF draft operation failed:',type(exc).__name__)
+        if isinstance(exc,APIError) and re.fullmatch(r'HTTP \d{3}',str(exc)):
+            print('API status:',str(exc))
         raise SystemExit(1)
