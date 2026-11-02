@@ -1,9 +1,9 @@
 import os
 import unittest
 from unittest.mock import patch,Mock
-from bot import Bot,connect
+from bot import Bot,connect,APIError
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,notify_previews,DISCLAIMER
+from pdf_drafts import plan,generate,retry_sample,notify_previews,DISCLAIMER
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -107,6 +107,21 @@ class DraftBridgeTests(unittest.TestCase):
         for n in range(2,5): self.add(n)
         for _ in range(2): generate(self.sources,self.bot,self.summary,day='2026-11-02')
         self.assertIn('Daily request limit',generate(self.sources,self.bot,self.summary,day='2026-11-02'))
+
+    def test_explicit_retry_keeps_source_and_does_not_repeat(self):
+        def fail(*args): raise APIError('HTTP 429')
+        with self.assertRaises(APIError):
+            generate(self.sources,self.bot,fail,preview=True)
+        seen=[]
+        def summary(bot,row):
+            seen.append(row[0])
+            return self.summary(bot,row)
+        self.assertIn('preview',retry_sample(self.sources,self.bot,summary))
+        self.assertEqual(seen,[self.url])
+        self.assertIn('already attempted',retry_sample(self.sources,self.bot,summary))
+        self.assertEqual(len(seen),1)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM pdf_generation').fetchone()[0],2)
+        self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'preview')
 
 
 if __name__ == '__main__':
