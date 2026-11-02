@@ -1,9 +1,9 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch,Mock
 from bot import Bot,connect
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,DISCLAIMER
+from pdf_drafts import plan,generate,notify_previews,DISCLAIMER
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -81,6 +81,32 @@ class DraftBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate(self.sources,self.bot,lambda *args:dict(relevant=True,hy='English only'))
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+
+    def test_baseline_sample_cannot_be_published(self):
+        generate(self.sources,self.bot,self.summary,preview=True)
+        ident,status=self.db.execute('SELECT id,status FROM drafts').fetchone()
+        self.assertEqual(status,'preview')
+        self.assertEqual(self.sources.execute('SELECT is_baseline FROM source_records').fetchone()[0],1)
+        self.assertEqual(plan(self.sources,self.db)['ready'],0)
+        self.bot.api=Mock()
+        self.bot.send=Mock()
+        self.bot.notify()
+        self.bot.send.assert_not_called()
+        self.bot.update({'callback_query':{'id':'q','from':{'id':1},'data':f'approve:{ident}'}})
+        self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'preview')
+        self.assertEqual(self.db.execute('SELECT count(*) FROM channel_deliveries').fetchone()[0],0)
+        self.assertEqual(notify_previews(self.bot),1)
+        args,kwargs=self.bot.send.call_args
+        self.assertEqual(args[0],1)
+        self.assertNotIn('reply_markup',kwargs)
+        self.assertEqual(notify_previews(self.bot),0)
+
+    def test_preview_deduplicates_and_shares_daily_cap(self):
+        generate(self.sources,self.bot,self.summary,preview=True,day='2026-11-02')
+        self.assertIn('No eligible',generate(self.sources,self.bot,self.summary,preview=True,day='2026-11-02'))
+        for n in range(2,5): self.add(n)
+        for _ in range(2): generate(self.sources,self.bot,self.summary,day='2026-11-02')
+        self.assertIn('Daily request limit',generate(self.sources,self.bot,self.summary,day='2026-11-02'))
 
 
 if __name__ == '__main__':
