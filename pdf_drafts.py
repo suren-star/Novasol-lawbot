@@ -117,7 +117,7 @@ def verified_passages(result,row):
 def summarize(bot,row):
     instruction = (
       'Prepare an Armenian business-law alert for human approval. '
-      'Use the formal legal register of ARLIS. Retain official terminology and operative formulations, '
+      'For VAT registration use the official term ԱԱՀ-ի հաշվառման, not ԱԱՀ-ի հաշվի առման or ԱԱՀ-ի հաշվի առնման. Use the formal legal register of ARLIS. Retain official terminology and operative formulations, '
       'including exact conditions, thresholds and scope. Shorten by selecting relevant provisions '
       'rather than freely rewriting the document. Do not add conversational introductions, illustrative '
       'examples or generic advice about administrative risks. '
