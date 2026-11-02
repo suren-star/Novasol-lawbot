@@ -21,18 +21,18 @@ class DraftBridgeTests(unittest.TestCase):
         record_inventory(self.sources,{15:{self.url:'baseline'}},True)
         self.save(self.url)
 
-    def save(self,url,status='extracted',text='source body'):
+    def save(self,url,status='extracted',text='source business rule text for testing only'):
         save_version(self.sources,url,dict(sha256='abc',pages=1,text=text,status=status,
                                         uncertain_pages=[] if status=='extracted' else [1],official_links=[]))
 
-    def add(self,n,status='extracted',text='source body'):
+    def add(self,n,status='extracted',text='source business rule text for testing only'):
         url=f'https://www.arlis.am/releases/files/{n}/abc'
         record_inventory(self.sources,{15:{url:'New act'}})
         self.save(url,status,text)
         return url
 
     def summary(self,bot,row):
-        return {'relevant':True,'hy':'Օրենսդրական ակտի ամփոփագիր։'}
+        return {'relevant':True,'hy':'Օրենսդրական ակտի ամփոփագիր։','business_rule_quote':row[3]}
 
     def test_baseline_and_manual_review_never_generated(self):
         self.add(2,'manual_review')
@@ -81,6 +81,19 @@ class DraftBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate(self.sources,self.bot,lambda *args:dict(relevant=True,hy='English only'))
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+
+    def test_unverifiable_business_rule_blocks_draft(self):
+        self.add(2)
+        with self.assertRaises(ValueError):
+            generate(self.sources,self.bot,lambda *args:dict(relevant=True,hy='Օրենսդրական ամփոփագիր։',
+                     business_rule_quote='fabricated business rule that is not in this document'))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+
+    def test_irrelevant_budget_generates_no_draft(self):
+        self.add(2)
+        generate(self.sources,self.bot,lambda *args:dict(relevant=False,hy='',business_rule_quote=''))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+        self.assertEqual(self.db.execute('SELECT status FROM pdf_generation').fetchone()[0],'filtered')
 
     def test_baseline_sample_cannot_be_published(self):
         generate(self.sources,self.bot,self.summary,preview=True)
