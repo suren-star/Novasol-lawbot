@@ -1,5 +1,6 @@
 """Explicit PDF-to-draft bridge. Default command is a no-network plan."""
 import datetime as dt
+import difflib
 import hashlib
 import json
 import os
@@ -222,6 +223,50 @@ def review_details(db):
     print('No AI calls or Telegram messages. No response text or credentials displayed.')
 
 
+def cached_review(sources,db):
+    setup(db)
+    saved = db.execute('''SELECT g.url,g.source_hash,c.reason,c.response
+      FROM pdf_generation g JOIN pdf_response_cache c USING(fingerprint)
+      WHERE g.status='review' AND c.response IS NOT NULL
+      ORDER BY g.rowid DESC LIMIT 1''').fetchone()
+    if not saved:
+        print('No cached failed response available. No AI request made.')
+        return
+    url,source_hash,reason,response = saved
+    print('Source:',url)
+    print('Reason:',reason)
+    result = json.loads(response)
+    if isinstance(result,str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError:
+            print('Saved response is invalid JSON; no text displayed.')
+            return
+    if not isinstance(result,dict):
+        print('Saved response is not an object.')
+        return
+    quote = result.get('business_rule_quote','')
+    hy = result.get('hy','')
+    print('Relevance field:',result.get('relevant') if type(result.get('relevant')) is bool else 'INVALID')
+    if not isinstance(quote,str): quote = ''
+    if not isinstance(hy,str): hy = ''
+    print('Quote characters:',len(quote))
+    print('Draft characters:',len(hy))
+    print('Model quote (not verified):\n'+quote[:2000])
+    source = sources.execute('SELECT text FROM source_versions WHERE url=? AND sha256=?',(url,source_hash)).fetchone()
+    if source:
+        body = ' '.join(source[0].split())
+        normalized_quote = ' '.join(quote.split())
+        print('Whitespace-normalized exact match:',bool(normalized_quote) and normalized_quote in body)
+        match = difflib.SequenceMatcher(None,normalized_quote[:2000],body).find_longest_match()
+        start = max(0,match.b-100)
+        print('Source excerpt near longest shared text (diagnostic only):\n'+body[start:start+1000])
+    else:
+        print('Matching source version unavailable.')
+    print('Saved draft (not validated, not published):\n'+hy[:1800])
+    print('No AI calls, Telegram messages or source status changes. No credentials displayed.')
+
+
 def diagnose(sources,db):
     setup(db)
     raw = os.getenv('ADMIN_CHAT_ID','')
@@ -290,8 +335,10 @@ def main():
             print('Saved failure types:',db.execute("SELECT error_type,count(*) FROM pdf_generation WHERE error_type IS NOT NULL GROUP BY error_type").fetchall())
         elif command == 'review-details':
             review_details(db)
+        elif command == 'cached-review':
+            cached_review(sources,db)
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose | review-details')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose | review-details | cached-review')
     finally:
         sources.close()
         db.close()
