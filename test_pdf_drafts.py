@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch,Mock
 from bot import Bot,connect,APIError
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,selected_sample,retry_sample,notify_previews
+from pdf_drafts import plan,generate,selected_sample,retry_sample,notify_previews,source_passages
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -111,6 +111,26 @@ class DraftBridgeTests(unittest.TestCase):
         generate(self.sources,self.bot,lambda *args:dict(relevant=False,hy='',business_rule_quote=''))
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
         self.assertEqual(self.db.execute('SELECT status FROM pdf_generation').fetchone()[0],'filtered')
+
+    def test_evidence_ids_copy_original_source_without_retyping(self):
+        original='պ այմանական բացթողման կարգը` համա -\nձայն հավելվածի։ '
+        self.add(2,text=original)
+        generate(self.sources,self.bot,lambda *args:dict(relevant=True,
+                 evidence_ids=['S001'],hy='Վառելիքի պայմանական բացթողման կարգ։'))
+        saved=json.loads(self.db.execute('SELECT passages FROM pdf_draft_evidence').fetchone()[0])
+        self.assertEqual(saved,{'S001':original})
+        self.assertNotIn('S001',self.db.execute('SELECT hy FROM drafts').fetchone()[0])
+
+    def test_unknown_evidence_id_is_rejected(self):
+        self.add(2)
+        with self.assertRaises(ValueError):
+            generate(self.sources,self.bot,lambda *args:dict(relevant=True,
+                     evidence_ids=['S999'],hy='Օրենսդրական ամփոփագիր։'))
+        self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+
+    def test_passages_preserve_complete_source(self):
+        original=('Տեքստ\n'*2000)+'վերջ'
+        self.assertEqual(''.join(source_passages(original).values()),original)
 
     def test_budget_reallocation_is_not_blocked_and_has_rubric(self):
         url=self.add(2,text='Պետական բյուջեի միջոցների վերաբաշխում՝ ըստ ծրագրերի։')
