@@ -209,6 +209,20 @@ def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_su
     return 'No eligible '+('baseline sample' if preview else 'new PDF')+'. No AI request made.'
 
 
+def selected_sample(sources,bot,selector,builder=summarize):
+    rows = candidates(sources,baseline=True)
+    if selector.isdigit():
+        rows = [row for row in rows if f'/releases/files/{selector}/' in row[0]]
+    else:
+        url = pdf_url(selector)
+        rows = [row for row in rows if row[0]==url]
+    if len(rows)!=1 or not eligible(rows[0]):
+        return 'Selected baseline PDF unavailable, ambiguous or ineligible. No AI request made.'
+    print('Selected source:',rows[0][0],flush=True)
+    print('Selected title:',rows[0][1],flush=True)
+    return generate(sources,bot,builder,preview=True,_rows=rows)
+
+
 def retry_sample(sources,bot,builder=summarize,day=None):
     setup(bot.db)
     failed = bot.db.execute("""SELECT fingerprint,url,source_hash FROM pdf_generation
@@ -347,7 +361,10 @@ def main():
             print(generate(sources,Bot(db)))
             print('At most one AI call; no Telegram messages. Request cap: 3/day for this PDF bridge.')
         elif command == 'sample':
-            print(generate(sources,Bot(db),preview=True))
+            if len(sys.argv)>3:
+                raise ValueError('Use: pdf_drafts.py sample [saved PDF file ID or URL]')
+            print(selected_sample(sources,Bot(db),sys.argv[2]) if len(sys.argv)==3
+                  else generate(sources,Bot(db),preview=True))
             print('At most one paid AI call. Baseline unchanged. No Telegram messages; preview cannot be approved for publication.')
         elif command == 'retry-sample':
             print(retry_sample(sources,Bot(db)))
