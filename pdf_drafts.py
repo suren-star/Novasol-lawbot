@@ -149,6 +149,38 @@ def notify_previews(bot):
     return len(rows)
 
 
+def diagnose(sources,db):
+    setup(db)
+    raw = os.getenv('ADMIN_CHAT_ID','')
+    try:
+        valid_admin = int(raw) > 0
+    except ValueError:
+        valid_admin = False
+    print('ADMIN_CHAT_ID positive numeric format:',valid_admin)
+    for key in ('TELEGRAM_BOT_TOKEN','OPENAI_API_KEY','OPENAI_MODEL'):
+        print(key+':', 'SET' if os.getenv(key,'').strip() else 'MISSING/EMPTY')
+    try:
+        Bot(db)
+    except Exception as exc:
+        print('Bot initialization:',type(exc).__name__)
+    else:
+        print('Bot initialization: OK')
+    try:
+        rows=candidates(sources,baseline=True)
+        print('Baseline extracted candidates:',len(rows))
+        valid=invalid=0
+        for row in rows:
+            try:
+                valid += bool(eligible(row))
+            except Exception:
+                invalid += 1
+        print('Eligible baseline PDFs:',valid)
+        print('Invalid source records:',invalid)
+    except Exception as exc:
+        print('Source candidate read:',type(exc).__name__)
+    print('Network requests: 0. No credentials displayed.')
+
+
 def main():
     configuration()
     path = PRIVATE / 'sources.sqlite3'
@@ -159,7 +191,9 @@ def main():
     db = database()
     try:
         command = sys.argv[1] if len(sys.argv)>1 else 'plan'
-        if command == 'plan':
+        if command == 'diagnose':
+            diagnose(sources,db)
+        elif command == 'plan':
             print('PDF draft plan:',plan(sources,db))
             print('AI calls: 0; Telegram messages: 0; collection setting unchanged.')
         elif command == 'generate':
@@ -179,7 +213,7 @@ def main():
             print('PDF generation statuses:',db.execute('SELECT status,count(*) FROM pdf_generation GROUP BY status').fetchall())
             print('Saved failure types:',db.execute("SELECT error_type,count(*) FROM pdf_generation WHERE error_type IS NOT NULL GROUP BY error_type").fetchall())
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | sample-notify')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | sample-notify | diagnose')
     finally:
         sources.close()
         db.close()
