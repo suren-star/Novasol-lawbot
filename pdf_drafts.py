@@ -75,19 +75,19 @@ def summarize(bot,row):
     return json.loads(response['choices'][0]['message']['content'])
 
 
-def generate(sources,bot,builder=summarize,day=None,preview=False):
+def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_suffix=''):
     setup(bot.db)
     if not bot.admin or not bot.ai_key or not bot.model:
         raise APIError('Administrator and AI settings required')
     day = day or dt.datetime.now(ZoneInfo('Asia/Yerevan')).date().isoformat()
-    rows = candidates(sources,baseline=preview)
+    rows = candidates(sources,baseline=preview) if _rows is None else _rows
     # Stable, bounded sample; use one existing source without changing its baseline.
     if preview:
         rows = sorted(rows,key=lambda row:(len(row[3])>20000,-min(len(row[3]),20000),row[0]))
     for row in rows:
         if not eligible(row):
             continue  # Never truncate a legal source to fit the model input.
-        key = ('preview:' if preview else '') + fingerprint(row)
+        key = ('preview:' if preview else '') + fingerprint(row) + _suffix
         # Reserve before the paid call. Failed or interrupted calls are never
         # retried automatically. All reservations count towards the daily cap.
         bot.db.execute('BEGIN IMMEDIATE')
@@ -134,6 +134,22 @@ def generate(sources,bot,builder=summarize,day=None,preview=False):
                                (type(exc).__name__,key))
             raise
     return 'No eligible '+('baseline sample' if preview else 'new PDF')+'. No AI request made.'
+
+
+def retry_sample(sources,bot,builder=summarize,day=None):
+    setup(bot.db)
+    failed = bot.db.execute("""SELECT fingerprint,url,source_hash FROM pdf_generation
+      WHERE fingerprint LIKE 'preview:pdf:%' AND fingerprint NOT LIKE '%:retry-once'
+        AND status='review' AND error_type='APIError' ORDER BY rowid LIMIT 1""").fetchone()
+    if not failed:
+        return 'No failed API sample available. No AI request made.'
+    key,url,source_hash = failed
+    if bot.db.execute('SELECT 1 FROM pdf_generation WHERE fingerprint=?',(key+':retry-once',)).fetchone():
+        return 'This sample retry was already attempted. No AI request made.'
+    rows = [r for r in candidates(sources,baseline=True) if r[0]==url and r[2]==source_hash]
+    if not rows or not eligible(rows[0]):
+        return 'Original source version is no longer eligible. No AI request made.'
+    return generate(sources,bot,builder,day,preview=True,_rows=rows[:1],_suffix=':retry-once')
 
 
 def notify_previews(bot):
@@ -202,6 +218,9 @@ def main():
         elif command == 'sample':
             print(generate(sources,Bot(db),preview=True))
             print('At most one paid AI call. Baseline unchanged. No Telegram messages; preview cannot be approved for publication.')
+        elif command == 'retry-sample':
+            print(retry_sample(sources,Bot(db)))
+            print('At most one paid AI call for the same failed sample. No Telegram messages or channel posts.')
         elif command == 'sample-notify':
             print('Preview messages:',notify_previews(Bot(db)))
             print('Administrator only; no approval buttons, AI calls or channel posts.')
@@ -213,7 +232,7 @@ def main():
             print('PDF generation statuses:',db.execute('SELECT status,count(*) FROM pdf_generation GROUP BY status').fetchall())
             print('Saved failure types:',db.execute("SELECT error_type,count(*) FROM pdf_generation WHERE error_type IS NOT NULL GROUP BY error_type").fetchall())
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | sample-notify | diagnose')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose')
     finally:
         sources.close()
         db.close()
