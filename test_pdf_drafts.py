@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch,Mock
 from bot import Bot,connect,APIError
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,selected_sample,retry_sample,notify_previews,source_passages
+from pdf_drafts import plan,generate,selected_sample,retry_sample,notify_previews,source_passages,formatted_preview
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -131,6 +131,16 @@ class DraftBridgeTests(unittest.TestCase):
     def test_passages_preserve_complete_source(self):
         original=('Տեքստ\n'*2000)+'վերջ'
         self.assertEqual(''.join(source_passages(original).values()),original)
+
+    def test_existing_preview_can_be_formatted_without_generation_or_approval(self):
+        generate(self.sources,self.bot,self.summary,preview=True)
+        self.bot.send=Mock()
+        self.assertIn('No AI calls',formatted_preview(self.bot))
+        self.assertEqual(self.bot.send.call_args.args[0],1)
+        self.assertNotIn('reply_markup',self.bot.send.call_args.kwargs)
+        self.assertIn('already attempted',formatted_preview(self.bot))
+        self.bot.send.assert_called_once()
+        self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'preview')
 
     def test_budget_reallocation_is_not_blocked_and_has_rubric(self):
         url=self.add(2,text='Պետական բյուջեի միջոցների վերաբաշխում՝ ըստ ծրագրերի։')
