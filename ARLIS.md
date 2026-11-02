@@ -53,3 +53,14 @@ The following explicit commands maintain `.private/sources.sqlite3`, separately 
 Run `baseline` ONCE to mark current records as pre-existing, then `scan` for later discoveries. A second baseline is rejected to prevent hiding new publications. All requested section inventories must succeed before a scan commits. `extract` handles at most three pending PDFs per invocation, including baseline documents; it stores text, SHA-256, page count, review flags and embedded official links. Repeated inventory records and identical versions are deduplicated. Errors remain in the ledger for review; there is no automatic retry yet. No command generates drafts or publishes messages.
 
 Current scope is only rolling weekly lists for sections 11, 15 and 16. Documents that disappear between scans can be missed; other categories, historical gaps and replacements at an already processed URL are not automatically checked. Baseline flags and stored versions prepare later integration but are not wired to the publishing pipeline. Do not add these commands to cron yet.
+
+
+## HTML-first staging
+
+HTML is the primary source format. PDF extraction is optional and is not needed by the bot's existing HTML collection or the new `check_html.py` and `html_sources.py` tools. All publishing remains subject to administrator approval.
+
+Upload `check_html.py` and `html_sources.py` alongside the existing `arlis_source.py`. Run `/home/novasol/novasol-lawbot/check_html.py` to inspect up to three homepage cards without PDF, AI, Telegram or database writes. An optional official act URL tests one document, including its explicit comparison links. Missing pairs mean comparison is not established, not that nothing changed.
+
+`html_sources.py baseline` explicitly saves existing homepage sources once; `scan` stores new or changed snapshots with status pending_review; `status` reports counts. The separate private HTML SQLite ledger deduplicates stable evidence hashes and rejects incomplete evidence. Source reads finish before the transaction commits. These snapshots are not yet wired to the draft queue. Do not schedule these staging commands or enable collection yet.
+
+Discovery remains limited to recent homepage cards. Full date-based discovery and pagination are unresolved, so this change does not establish complete daily monitoring.
