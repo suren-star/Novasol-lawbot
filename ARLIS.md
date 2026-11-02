@@ -64,3 +64,17 @@ Upload `check_html.py` and `html_sources.py` alongside the existing `arlis_sourc
 `html_sources.py baseline` explicitly saves existing homepage sources once; `scan` stores new or changed snapshots with status pending_review; `status` reports counts. The separate private HTML SQLite ledger deduplicates stable evidence hashes and rejects incomplete evidence. Source reads finish before the transaction commits. These snapshots are not yet wired to the draft queue. Do not schedule these staging commands or enable collection yet.
 
 Discovery remains limited to recent homepage cards. Full date-based discovery and pagination are unresolved, so this change does not establish complete daily monitoring.
+
+
+## PDF draft bridge (explicit commands, not scheduled)
+
+Upload `pdf_drafts.py` alongside the existing bot, hosting and PDF source modules. No main bot or cron changes are required. The default command and `plan` inspect the saved source ledger without network calls; generation tracking tables are initialized in the bot database. The source ledger is opened read-only.
+
+- `pdf_drafts.py plan`: counts eligible new extracted records, baseline exclusions, manual review exclusions and oversized sources. Current 29 baseline records are deliberately excluded. Ready=0 is expected until new documents have been discovered AND extracted.
+- `pdf_drafts.py generate`: explicitly opts into at most ONE paid AI call. A maximum of three reservations per Yerevan day applies to this PDF bridge only (not the older HTML collector or unrelated API use). Complete source text plus title must fit 60,000 characters; no silent truncation. Failed/interrupted requests remain reserved and require operator review; no automatic paid retries.
+- `pdf_drafts.py notify`: sends pending drafts to the configured administrator using the existing approval workflow. It does not publish directly to the channel. Administrator approval queues publication for the existing minute cron.
+- `pdf_drafts.py status`: reports generation statuses and saved error classes without credentials.
+
+Generation selects only records with is_baseline=0 and both latest version and record status extracted. Draft fingerprints combine source URL and PDF hash. Summaries are Armenian, append the verified PDF source URL and explicitly state that comparison to the previous edition is not established. This PDF-only bridge cannot substantiate before/after analysis. It does not match PDFs to official revision pairs yet. Relevance and legal interpretation still require human review. No successful live generation has been validated; prior OpenAI tests returned 429. Tests use mock generation and no paid requests.
+
+Do not enable COLLECTION_ENABLED or add generation to cron yet. Discovery remains limited to the configured rolling lists; model quality, completeness, source-to-revision matching and operations/retry handling still need validation.
