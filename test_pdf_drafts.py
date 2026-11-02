@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch,Mock
 from bot import Bot,connect,APIError
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,retry_sample,notify_previews,DISCLAIMER
+from pdf_drafts import plan,generate,retry_sample,notify_previews
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class DraftBridgeTests(unittest.TestCase):
         generate(self.sources,self.bot,self.summary)
         row=self.db.execute('SELECT hy,status,notified FROM drafts').fetchone()
         self.assertIn(url,row[0])
-        self.assertIn(DISCLAIMER,row[0])
+        self.assertNotIn('Նախկին խմբագրության հետ համեմատությունը չի հաստատվել',row[0])
         self.assertEqual(row[1:],('pending',0))
         generate(self.sources,self.bot,self.summary)
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],1)
