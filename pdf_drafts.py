@@ -117,7 +117,7 @@ def verified_passages(result,row):
 def summarize(bot,row):
     instruction = (
       'Prepare an Armenian business-law alert for human approval. '
-      'For VAT registration use the official term ԱԱՀ-ի հաշվառման, not ԱԱՀ-ի հաշվի առման or ԱԱՀ-ի հաշվի առնման. Use the formal legal register of ARLIS. Retain official terminology and operative formulations, '
+      'Distinguish ԱԱՀ-ի հաշվարկ (VAT calculation/return) from հաշվառում (registration/accounting) according to the source; never substitute one for the other. Preserve the source-specific names of forms. Keep each form and its taxpayer category distinct, including EAEU residence, permanent-establishment status and customer exclusions; do not merge these scopes into generic nonresidents or all individual entrepreneurs. Preserve whether a field is filled automatically or entered by the taxpayer; do not turn automatic exchange-rate calculation into a new manual duty. Do not invent business subdivisions, administrative-risk advice or obligations unsupported by the act. Use the formal legal register of ARLIS. Retain official terminology and operative formulations, '
       'including exact conditions, thresholds and scope. Shorten by selecting relevant provisions '
       'rather than freely rewriting the document. Do not add conversational introductions, illustrative '
       'examples or generic advice about administrative risks. '
