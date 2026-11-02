@@ -106,11 +106,22 @@ class DraftBridgeTests(unittest.TestCase):
         generate(self.sources,self.bot,lambda bot,row:json.dumps(self.summary(bot,row)))
         self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'pending')
 
-    def test_irrelevant_budget_generates_no_draft(self):
+    def test_irrelevant_document_generates_no_draft(self):
         self.add(2)
         generate(self.sources,self.bot,lambda *args:dict(relevant=False,hy='',business_rule_quote=''))
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
         self.assertEqual(self.db.execute('SELECT status FROM pdf_generation').fetchone()[0],'filtered')
+
+    def test_budget_reallocation_is_not_blocked_and_has_rubric(self):
+        url=self.add(2,text='Պետական բյուջեի միջոցների վերաբաշխում՝ ըստ ծրագրերի։')
+        self.assertEqual(plan(self.sources,self.db)['ready'],1)
+        self.assertEqual(plan(self.sources,self.db)['budget_category'],1)
+        generate(self.sources,self.bot,lambda bot,row:dict(relevant=True,
+            evidence_quote=row[3],hy='Միջոցները վերաբաշխվել են ծրագրերի միջև։'))
+        text,status=self.db.execute('SELECT hy,status FROM drafts').fetchone()
+        self.assertTrue(text.startswith('Բյուջե\n\n'))
+        self.assertIn(url,text)
+        self.assertEqual(status,'pending')
 
     def test_baseline_sample_cannot_be_published(self):
         generate(self.sources,self.bot,self.summary,preview=True)
