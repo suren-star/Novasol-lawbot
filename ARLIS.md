@@ -78,3 +78,10 @@ Upload `pdf_drafts.py` alongside the existing bot, hosting and PDF source module
 Generation selects only records with is_baseline=0 and both latest version and record status extracted. Draft fingerprints combine source URL and PDF hash. Summaries are Armenian, append the verified PDF source URL and explicitly state that comparison to the previous edition is not established. This PDF-only bridge cannot substantiate before/after analysis. It does not match PDFs to official revision pairs yet. Relevance and legal interpretation still require human review. No successful live generation has been validated; prior OpenAI tests returned 429. Tests use mock generation and no paid requests.
 
 Do not enable COLLECTION_ENABLED or add generation to cron yet. Discovery remains limited to the configured rolling lists; model quality, completeness, source-to-revision matching and operations/retry handling still need validation.
+
+
+### Explicit private baseline sample
+
+`pdf_drafts.py sample` opts into at most one paid AI call on an extracted baseline PDF that fits the input limit. It never changes baseline flags and never sends Telegram messages. The result is stored with status preview, outside pending approval/publication queues. Duplicate source/hash previews are skipped and all sample calls share the existing three-per-day request reservation cap with normal PDF generation. No automatic retries follow failures.
+
+`pdf_drafts.py sample-notify` sends saved, previously unnotified previews only to the configured administrator, clearly marked as experimental, with no approval buttons. The existing approval callback accepts only pending drafts, so preview rows cannot be published. Preview notification is claimed before sending to prevent duplicate attempts; an ambiguous send failure needs operator review. Irrelevant documents may produce filtered rather than a preview. This validates summarization of one PDF only, not before/after legal analysis or complete coverage. No paid live calls have been performed during development.
