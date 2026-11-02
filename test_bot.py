@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock
-from bot import Bot, connect, parse_page
+from bot import Bot, connect, parse_page, telegram_format
 
 
 class ApprovalTests(unittest.TestCase):
@@ -60,6 +60,33 @@ class ApprovalTests(unittest.TestCase):
         p = parse_page('<script>bad</script><a href="/hy/acts/1">Act</a>')
         self.assertEqual(p.text, ['Act'])
         self.assertEqual(p.links, [('/hy/acts/1','Act')])
+
+    def test_sections_are_separated_and_bold_with_hidden_source_link(self):
+        url='https://www.arlis.am/releases/files/6137/abc'
+        text,entities=telegram_format('Ի՞նչ է փոխվել. Առաջին բաժին։ ՈՒմ է վերաբերում. Երկրորդ բաժին։ Ե՞րբ և ի՞նչ անել. Երրորդ բաժին։\n\nԱղբյուր՝\n'+url)
+        self.assertIn('Ի՞նչ է փոխվել\nԱռաջին բաժին։\n\nՈ՞ւմ է վերաբերում\n',text)
+        self.assertNotIn(url,text)
+        self.assertNotIn('Աղբյուր՝',text)
+        self.assertTrue(text.endswith('Կարդալ փաստաթուղթը'))
+        self.assertEqual([e['type'] for e in entities],['bold','bold','bold','text_link'])
+        self.assertEqual(entities[-1]['url'],url)
+
+    def test_entity_offsets_use_utf16_and_do_not_parse_generated_markup(self):
+        text,entities=telegram_format('📌 <b>տեքստ</b>\n\nԻ՞նչ է փոխվել\nԱկտ։')
+        self.assertIn('<b>տեքստ</b>',text)
+        encoded=text.encode('utf-16-le')
+        entity=entities[0]
+        self.assertEqual(encoded[entity['offset']*2:(entity['offset']+entity['length'])*2].decode('utf-16-le'),'Ի՞նչ է փոխվել')
+
+    def test_send_passes_telegram_entities_and_keeps_preview_disabled(self):
+        url='https://www.arlis.am/hy/acts/123/latest'
+        Bot.send(self.bot,42,'Ի՞նչ է փոխվել\nՏեքստ։\n\n'+url)
+        name=self.bot.api.call_args.args[0]
+        payload=self.bot.api.call_args.kwargs
+        self.assertEqual(name,'sendMessage')
+        self.assertNotIn(url,payload['text'])
+        self.assertEqual(payload['entities'][-1]['type'],'text_link')
+        self.assertEqual(payload['link_preview_options'],{'is_disabled':True})
 
 
 if __name__ == '__main__':
