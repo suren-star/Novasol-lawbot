@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch,Mock
 from bot import Bot,connect,APIError
 from pdf_sources import ledger,record_inventory,save_version
-from pdf_drafts import plan,generate,retry_sample,notify_previews
+from pdf_drafts import plan,generate,selected_sample,retry_sample,notify_previews
 
 
 class DraftBridgeTests(unittest.TestCase):
@@ -163,6 +163,23 @@ class DraftBridgeTests(unittest.TestCase):
         self.assertEqual(len(seen),1)
         self.assertEqual(self.db.execute('SELECT count(*) FROM pdf_generation').fetchone()[0],2)
         self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'preview')
+
+    def test_selected_sample_uses_only_saved_requested_baseline(self):
+        other='https://www.arlis.am/releases/files/6143/abc'
+        # Set up a second existing baseline source in this isolated fixture.
+        self.sources.execute("INSERT INTO source_records VALUES(?,?,?,?,?,?)",(other,'Selected act','now','now',1,'pending'))
+        self.sources.commit()
+        self.save(other)
+        seen=[]
+        def summary(bot,row):
+            seen.append(row[0])
+            return self.summary(bot,row)
+        selected_sample(self.sources,self.bot,'6143',summary)
+        self.assertEqual(seen,[other])
+        selected_sample(self.sources,self.bot,'6143',summary)
+        self.assertEqual(len(seen),1)
+        self.assertIn('No AI request',selected_sample(self.sources,self.bot,'9999',summary))
+        self.assertEqual(len(seen),1)
 
 
 if __name__ == '__main__':
