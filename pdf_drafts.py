@@ -13,7 +13,6 @@ from pdf_sources import pdf_url
 
 MAX_CHARACTERS = 60000
 DAILY_CALL_LIMIT = 3
-DISCLAIMER = 'Նախկին խմբագրության հետ համեմատությունը չի հաստատվել։'
 
 
 def setup(db):
@@ -71,8 +70,12 @@ def summarize(bot,row):
       'effective dates and practical steps only when expressly supported. Identify act number and articles if available. '
       'No previous edition or comparison is provided: NEVER claim verified before/after differences '
       'or invent previous rules. Do not assume every provision has the same effective date. '
-      'Distinguish adopted acts from proposals; say when a fact is unspecified. '
-      'Use concise Armenian sections: Փոփոխությունը, Ո՞ւմ է վերաբերում, Ժամկետը, Անելիքը. '
+      'Distinguish adopted acts from proposals. '
+      'Include only supported, useful facts. Omit unavailable facts and unsupported sections entirely. '
+      'Never list changes that the document does NOT contain, unrelated topics, missing data, '
+      'or inability to compare previous editions. Do not add technical caveats to the public post. '
+      'Absence of evidence must never become an invented fact or a claim that nothing changed. '
+      'Use concise Armenian sections where supported: Փոփոխությունը, Ո՞ւմ է վերաբերում, Ժամկետը, Անելիքը. '
       'Avoid repetitive filler and generic claims about efficiency or modernization. '
       'Preserve monetary amounts with the exact source unit; do not convert thousands to millions '
       'or combine units such as million thousand. Omit amounts if table alignment is ambiguous. '
@@ -136,7 +139,7 @@ def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_su
                 armenian = sum('\u0531'<=c<='\u0587' for c in hy)
                 if not letters or armenian/letters < .5:
                     raise ValueError('Summary is not Armenian')
-                post = hy.strip()+'\n\n'+DISCLAIMER+'\n\nԱղբյուր՝\n'+pdf_url(row[0])
+                post = hy.strip()+'\n\nԱղբյուր՝\n'+pdf_url(row[0])
                 status = 'preview' if preview else 'drafted'
             with bot.db:
                 if result['relevant']:
