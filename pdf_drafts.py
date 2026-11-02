@@ -49,16 +49,41 @@ def eligible(row):
     return bool(row[3].strip()) and len(row[3])+len(row[1]) <= MAX_CHARACTERS
 
 
+def budget_hold(row):
+    # Conservative preflight hold, not a conclusion about all provisions.
+    # Include the preamble because listing titles can be truncated.
+    heading = (row[1]+' '+row[3][:2500]).casefold()
+    return 'բյուջե' in heading and 'վերաբաշխ' in heading
+
+
+def sample_list(sources,db):
+    setup(db)
+    attempted = {r[0] for r in db.execute('SELECT fingerprint FROM pdf_generation')}
+    rows = candidates(sources,baseline=True)
+    held = [r for r in rows if budget_hold(r)]
+    print('Budget reallocations held for editorial review:',len(held))
+    ready = [r for r in rows if eligible(r) and not budget_hold(r)
+             and 'preview:'+fingerprint(r) not in attempted]
+    print('Unattempted sample candidates:',len(ready))
+    for row in ready:
+        print('Title:',row[1])
+        print('Source:',row[0])
+        print('Pages:',row[4],'Text characters:',len(row[3]))
+    print('Candidate listing only; business relevance is not established.')
+    print('No AI calls, Telegram messages or source status changes.')
+
+
 def plan(sources,db):
     setup(db)
     rows = candidates(sources)
     done = {r[0] for r in db.execute('SELECT fingerprint FROM pdf_generation')}
-    ready = sum(eligible(r) and fingerprint(r) not in done for r in rows)
+    ready = sum(eligible(r) and not budget_hold(r) and fingerprint(r) not in done for r in rows)
     blocked = sum(not eligible(r) for r in rows)
     baseline = sources.execute('SELECT count(*) FROM source_records WHERE is_baseline=1').fetchone()[0]
     review = sources.execute("SELECT count(*) FROM source_records WHERE status='manual_review'").fetchone()[0]
     return dict(baseline_excluded=baseline,manual_review_excluded=review,
                 ready=ready,oversize_or_empty=blocked,
+                budget_editorial_hold=sum(budget_hold(r) for r in rows),
                 attempted_or_staged=sum(fingerprint(r) in done for r in rows))
 
 
@@ -112,7 +137,7 @@ def generate(sources,bot,builder=summarize,day=None,preview=False,_rows=None,_su
     if preview:
         rows = sorted(rows,key=lambda row:(len(row[3])>20000,-min(len(row[3]),20000),row[0]))
     for row in rows:
-        if not eligible(row):
+        if not eligible(row) or budget_hold(row):
             continue  # Never truncate a legal source to fit the model input.
         key = ('preview:' if preview else '') + fingerprint(row) + _suffix
         # Reserve before the paid call. Failed or interrupted calls are never
@@ -337,8 +362,10 @@ def main():
             review_details(db)
         elif command == 'cached-review':
             cached_review(sources,db)
+        elif command == 'sample-list':
+            sample_list(sources,db)
         else:
-            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose | review-details | cached-review')
+            raise ValueError('Use: pdf_drafts.py plan | generate | notify | status | sample | retry-sample | sample-notify | diagnose | review-details | cached-review | sample-list')
     finally:
         sources.close()
         db.close()
