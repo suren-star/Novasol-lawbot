@@ -1,4 +1,5 @@
 import os
+import json
 import unittest
 from unittest.mock import patch,Mock
 from bot import Bot,connect,APIError
@@ -88,6 +89,22 @@ class DraftBridgeTests(unittest.TestCase):
             generate(self.sources,self.bot,lambda *args:dict(relevant=True,hy='Օրենսդրական ամփոփագիր։',
                      business_rule_quote='fabricated business rule that is not in this document'))
         self.assertEqual(self.db.execute('SELECT count(*) FROM drafts').fetchone()[0],0)
+        response,reason=self.db.execute('SELECT response,reason FROM pdf_response_cache').fetchone()
+        self.assertEqual(reason,'BUSINESS_QUOTE_NOT_VERIFIABLE')
+        self.assertIn('fabricated business rule',response)
+
+    def test_raw_invalid_json_is_cached_before_parsing(self):
+        self.add(2)
+        with self.assertRaises(json.JSONDecodeError):
+            generate(self.sources,self.bot,lambda *args:'{invalid-json')
+        response,reason=self.db.execute('SELECT response,reason FROM pdf_response_cache').fetchone()
+        self.assertEqual(json.loads(response),'{invalid-json')
+        self.assertEqual(reason,'RESPONSE_JSON_INVALID')
+
+    def test_valid_raw_json_can_form_a_draft(self):
+        self.add(2)
+        generate(self.sources,self.bot,lambda bot,row:json.dumps(self.summary(bot,row)))
+        self.assertEqual(self.db.execute('SELECT status FROM drafts').fetchone()[0],'pending')
 
     def test_irrelevant_budget_generates_no_draft(self):
         self.add(2)
